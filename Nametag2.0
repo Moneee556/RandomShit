@@ -1,57 +1,72 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local localPlayer = Players.LocalPlayer
-local chatTag = {
+
+-- Replace "yes" with the name of the player you want to give the tag to
+local playerName = Players.LocalPlayer.Name
+
+-- Add the player's chat tag to the table
+local ChatTag = {}
+ChatTag[playerName] = {
     TagText = "VAPE PRIVATE",
-    TagColor = Color3.new(0.7, 0, 1)
+    TagColor = Color3.new(0.7, 0, 1),
 }
 
-for _, connection in pairs(getconnections(ReplicatedStorage.DefaultChatSystemChatEvents.OnNewMessage.OnClientEvent)) do
-    local listenerFunc = connection.Function
+-- Store the old chat channel functions
+local oldChannelTab
+local oldChannelFunc
+local oldChannelTabs = {}
 
-    if listenerFunc and #debug.getupvalues(listenerFunc) > 0 then
-        local firstUpValue = debug.getupvalues(listenerFunc)[1]
+-- Hook into the chat message events
+for _, eventConnection in pairs(getconnections(ReplicatedStorage.DefaultChatSystemChatEvents.OnNewMessage.OnClientEvent)) do
+    local listenerFunction = eventConnection.Function
 
-        if type(firstUpValue) == "table" and getmetatable(firstUpValue) and getmetatable(firstUpValue).GetChannel then
-            local oldChannelTable = getmetatable(firstUpValue)
-            local oldGetChannel = oldChannelTable.GetChannel
+    -- Check if the function is the correct one
+    if listenerFunction and #debug.getupvalues(listenerFunction) > 0 then
+        local upvalues = debug.getupvalues(listenerFunction)
+        local firstUpvalue = upvalues[1]
 
-            oldChannelTable.GetChannel = function(self, channelName)
-                local channel = oldGetChannel(self, channelName)
+        if type(firstUpvalue) == "table" and getmetatable(firstUpvalue) and getmetatable(firstUpvalue).GetChannel then
+            -- Store the old channel table and function
+            oldChannelTab = getmetatable(firstUpvalue)
+            oldChannelFunc = oldChannelTab.GetChannel
 
-                if channel and channel.AddMessageToChannel then
-                    local oldAddMessage = channel.AddMessageToChannel
+            -- Replace the GetChannel function
+            oldChannelTab.GetChannel = function(self, name)
+                local tab = oldChannelFunc(self, name)
 
-                    if not channel.oldAddMessage then
-                        channel.oldAddMessage = oldAddMessage
+                if tab and tab.AddMessageToChannel then
+                    local addMessage = tab.AddMessageToChannel
+
+                    -- Store the old AddMessageToChannel function
+                    if not oldChannelTabs[tab] then
+                        oldChannelTabs[tab] = addMessage
                     end
 
-                    channel.AddMessageToChannel = function(self2, messageData)
-                        local speakerName = messageData.FromSpeaker
+                    -- Replace the AddMessageToChannel function
+                    tab.AddMessageToChannel = function(self2, messageData)
+                        local fromSpeaker = messageData.FromSpeaker
 
-                        if speakerName and Players[speakerName] then
-                            local speaker = Players[speakerName]
-                            local nameColor = speaker.Team and speaker.TeamColor.Color or Color3.new(135, 206, 235)
+                        -- Check if the message sender has a chat tag
+                        if fromSpeaker and Players[fromSpeaker] and ChatTag[Players[fromSpeaker].Name] then
+                            local tag = {
+                                TagColor = ChatTag[Players[fromSpeaker].Name].TagColor,
+                                TagText = ChatTag[Players[fromSpeaker].Name].TagText,
+                            }
 
-                            if chatTag[speaker.Name] then
-                                messageData.ExtraData = {
-                                    NameColor = nameColor,
-                                    Tags = {
-                                        unpack(messageData.ExtraData.Tags),
-                                        {
-                                            TagColor = chatTag[speaker.Name].TagColor,
-                                            TagText = chatTag[speaker.Name].TagText,
-                                        },
-                                    },
-                                }
-                            end
+                            -- Add the tag to the message data
+                            messageData.ExtraData = {
+                                NameColor = Players[fromSpeaker].Team == nil and Color3.new(135, 206, 235)
+                                    or Players[fromSpeaker].TeamColor.Color,
+                                Tags = { tag, table.unpack(messageData.ExtraData.Tags) },
+                            }
                         end
 
-                        return oldAddMessage(self2, messageData)
+                        -- Call the old AddMessageToChannel function
+                        return addMessage(self2, messageData)
                     end
                 end
 
-                return channel
+                return tab
             end
         end
     end
