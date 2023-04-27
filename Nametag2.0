@@ -1,0 +1,58 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local localPlayer = Players.LocalPlayer
+local chatTag = {
+    TagText = "VAPE PRIVATE",
+    TagColor = Color3.new(0.7, 0, 1)
+}
+
+for _, connection in pairs(getconnections(ReplicatedStorage.DefaultChatSystemChatEvents.OnNewMessage.OnClientEvent)) do
+    local listenerFunc = connection.Function
+
+    if listenerFunc and #debug.getupvalues(listenerFunc) > 0 then
+        local firstUpValue = debug.getupvalues(listenerFunc)[1]
+
+        if type(firstUpValue) == "table" and getmetatable(firstUpValue) and getmetatable(firstUpValue).GetChannel then
+            local oldChannelTable = getmetatable(firstUpValue)
+            local oldGetChannel = oldChannelTable.GetChannel
+
+            oldChannelTable.GetChannel = function(self, channelName)
+                local channel = oldGetChannel(self, channelName)
+
+                if channel and channel.AddMessageToChannel then
+                    local oldAddMessage = channel.AddMessageToChannel
+
+                    if not channel.oldAddMessage then
+                        channel.oldAddMessage = oldAddMessage
+                    end
+
+                    channel.AddMessageToChannel = function(self2, messageData)
+                        local speakerName = messageData.FromSpeaker
+
+                        if speakerName and Players[speakerName] then
+                            local speaker = Players[speakerName]
+                            local nameColor = speaker.Team and speaker.TeamColor.Color or Color3.new(135, 206, 235)
+
+                            if chatTag[speaker.Name] then
+                                messageData.ExtraData = {
+                                    NameColor = nameColor,
+                                    Tags = {
+                                        unpack(messageData.ExtraData.Tags),
+                                        {
+                                            TagColor = chatTag[speaker.Name].TagColor,
+                                            TagText = chatTag[speaker.Name].TagText,
+                                        },
+                                    },
+                                }
+                            end
+                        end
+
+                        return oldAddMessage(self2, messageData)
+                    end
+                end
+
+                return channel
+            end
+        end
+    end
+end
