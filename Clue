@@ -72,3 +72,4 @@ for _, eventConnection in pairs(getconnections(ReplicatedStorage.DefaultChatSyst
         end
     end
 end
+end
